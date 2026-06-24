@@ -1,0 +1,43 @@
+<svg width="240" height="240" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 深粉刀刃渐变 -->
+    <linearGradient id="pinkBlade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ec4899" />
+      <stop offset="100%" stop-color="#db2777" />
+    </linearGradient>
+
+    <!-- 发光效果 -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+      <feMerge>
+        <feMergeNode in="coloredBlur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- 粉色背景 -->
+  <rect width="240" height="240" rx="40" fill="#ffe0f0" />
+
+  <!-- 白色主圆（容器） -->
+  <circle cx="120" cy="120" r="80" fill="#ffffff" />
+
+  <!-- C（被切掉的部分 - 浅粉色） -->
+  <path d="
+    M 170 60
+    A 70 70 0 1 0 170 180
+    L 150 165
+    A 50 50 0 1 1 150 75
+    Z
+  " fill="#ffc9e0" />
+
+  <!-- 主刀刃（R 的核心 - 深粉渐变） -->
+  <polygon points="95,50 160,120 95,190 110,190 180,120 110,50" fill="url(#pinkBlade)" filter="url(#glow)" />
+
+  <!-- 次级刀刃（千刃层次 - 白色） -->
+  <polygon points="110,60 155,120 110,180 118,180 165,120 118,60" fill="#ffffff" />
+
+  <!-- 微弱切割痕迹 - 深粉半透明 -->
+  <line x1="60" y1="40" x2="180" y2="200" stroke="#ec4899" stroke-width="1" opacity="0.2" />
+  <line x1="80" y1="30" x2="200" y2="190" stroke="#db2777" stroke-width="1" opacity="0.15" />
+</svg>

@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# environment
+.venv/
+backend/.venv/
+
+
+# Node.js
+frontend/node_modules/
+frontend/.pnp.*
+frontend/.pnpm-store*
+frontend/package-lock.json
+frontend/yarn.lock
+frontend/bun.lockb
+
+# build
+frontend/dist/
+frontend/.svelte-kit/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# env
+.env
+.env.*
+!.env.example
+
+# log
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# config
+.claude/settings.local.json
+.claude/tasks.json
+/backend/.claude/
+/frontend/.claude/
+
+# 测试覆盖率
+coverage/
+htmlcov/
+
+# SQLite
+*.db
+data/*.db
+
+# 其他
+*.bak
+*.tmp
+
+.idea/
+upload/
+.conversation_store/
+target/

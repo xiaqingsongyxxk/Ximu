@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chiren 后端构建顺序分析</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --red: #ff6b6b;
+    --orange: #ffa657;
+    --green: #7ee787;
+    --blue: #79c0ff;
+    --purple: #d2a8ff;
+    --cyan: #56d4dd;
+    --yellow: #e3b341;
+    --pink: #ff7b9c;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 0;
+  }
+
+  /* Header */
+  .header {
+    border-bottom: 1px solid var(--border);
+    padding: 48px 32px 32px;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  .header h1 {
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .header .subtitle {
+    color: var(--text-dim);
+    font-size: 15px;
+  }
+  .header .meta {
+    margin-top: 12px;
+    display: flex;
+    gap: 16px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .header .meta span { display: flex; align-items: center; gap: 4px; }
+
+  /* Content */
+  .content { max-width: 960px; margin: 0 auto; padding: 32px; }
+
+  /* Section */
+  .phase {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .phase-header {
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: default;
+    border-bottom: 1px solid var(--border);
+  }
+  .phase-header .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .phase-header .badge.b-foundation { background: #1f3a3a; color: var(--cyan); }
+  .phase-header .badge.b-mvp       { background: #2d1f1f; color: var(--red); }
+  .phase-header .badge.b-diff      { background: #2d2d1f; color: var(--yellow); }
+  .phase-header .badge.b-refactor  { background: #1f2d3a; color: var(--blue); }
+  .phase-header .badge.b-infra     { background: #1f2d1f; color: var(--green); }
+  .phase-header .badge.b-business  { background: #2d1f2d; color: var(--purple); }
+  .phase-header .badge.b-value     { background: #2d251f; color: var(--orange); }
+  .phase-header .badge.b-output    { background: #2d1f28; color: var(--pink); }
+
+  .phase-header .title {
+    font-size: 16px;
+    font-weight: 600;
+    flex: 1;
+  }
+  .phase-header .date {
+    font-size: 13px;
+    color: var(--text-dim);
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+  }
+  .phase-header .layer-tag {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+    background: rgba(255,255,255,0.06);
+    color: var(--text-dim);
+  }
+
+  .phase-body { padding: 20px; }
+
+  .phase-body h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+    margin-top: 16px;
+  }
+  .phase-body h3:first-child { margin-top: 0; }
+
+  /* File tree */
+  .file-tree {
+    background: rgba(255,255,255,0.03);
+    border-radius: 6px;
+    padding: 12px 16px;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    overflow-x: auto;
+  }
+  .file-tree .dir  { color: var(--cyan); }
+  .file-tree .file { color: var(--text); }
+  .file-tree .comment {
+    color: var(--text-dim);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
+    font-size: 12px;
+  }
+  .file-tree .gap { height: 4px; }
+
+  /* Reason grid */
+  .reason-grid {
+    display: grid;
+    grid-template-columns: 1fr 3fr;
+    gap: 0;
+    font-size: 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .reason-grid .cell {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .reason-grid .cell:last-child,
+  .reason-grid .cell:nth-last-child(2) { border-bottom: none; }
+  .reason-grid .cell-key {
+    font-weight: 600;
+    color: var(--yellow);
+    background: rgba(255,255,255,0.02);
+  }
+  .reason-grid .cell-val {
+    color: var(--text);
+    border-left: 1px solid var(--border);
+  }
+
+  /* Dep graph */
+  .dep-graph {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    padding: 8px 0;
+  }
+  .dep-graph .node {
+    padding: 4px 12px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.04);
+    text-align: center;
+  }
+  .dep-graph .arrow { color: var(--text-dim); font-size: 16px; line-height: 1; }
+
+  /* Dep list */
+  .dep-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .dep-list .dep-item {
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .dep-item.dep-shared  { background: rgba(86,212,221,0.12); color: var(--cyan); }
+  .dep-item.dep-apps    { background: rgba(121,192,255,0.12); color: var(--blue); }
+  .dep-item.dep-external{ background: rgba(255,255,255,0.06); color: var(--text-dim); }
+
+  /* Commits */
+  .commit-list {
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+    color: var(--text-dim);
+  }
+  .commit-list .commit-msg {
+    color: var(--text);
+    margin-left: 4px;
+  }
+
+  /* Summary table */
+  .summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin-top: 24px;
+  }
+  .summary-table th {
+    text-align: left;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.04);
+    border-bottom: 2px solid var(--border);
+    font-weight: 600;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  .summary-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .summary-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  /* Principle cards */
+  .principle-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .principle-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .principle-card h4 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .principle-card p {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    padding: 32px;
+    color: var(--text-dim);
+    font-size: 13px;
+    border-top: 1px solid var(--border);
+    margin-top: 40px;
+  }
+
+  /* Totals */
+  .stat-row {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin: 20px 0;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 24px;
+    text-align: center;
+    flex: 1;
+    min-width: 140px;
+  }
+  .stat-card .num {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--blue);
+  }
+  .stat-card .label {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  @media (max-width: 640px) {
+    .header { padding: 32px 16px 24px; }
+    .content { padding: 16px; }
+    .reason-grid { grid-template-columns: 1fr; }
+    .reason-grid .cell-val { border-left: none; border-top: 1px solid var(--border); }
+    .stat-row { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Chiren 后端构建顺序分析</h1>
+  <div class="subtitle">按模块依赖和业务优先级解释为什么按这个顺序开发</div>
+  <div class="meta">
+    <span>📅 分析时间: 2026-06-23</span>
+    <span>📂 项目: Chiren (FastAPI + Python 3.13+)</span>
+    <span>🏗️ 后端模块数: 11 apps + 6 shared</span>
+  </div>
+</div>
+
+<div class="content">
+
+<!-- Stats -->
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="num">3</div>
+    <div class="label">开发阶段（层）</div>
+  </div>
+  <div class="stat-card">
+    <div class="num">12</div>
+    <div class="label">构建步骤</div>
+  </div>
+  <div class="stat-card">
+    <div class="num">23</div>
+    <div class="label">天（跨度）</div>
+  </div>
+  <div class="stat-card">
+    <div class="num">2</div>
+    <div class="label">开发者</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PHASE 1 -->
+<!-- ============================================================ -->
+<div class="phase">
+  <div class="phase-header">
+    <span class="badge b-foundation">1</span>
+    <span class="title">初始化项目结构</span>
+    <span class="date">2026-04-02</span>
+    <span class="layer-tag">第 0 层 · 基础设施</span>
+  </div>
+  <div class="phase-body">
+    <h3>📁 创建的文件</h3>
+    <div class="file-tree">
+      <span class="file">backend/pyproject.toml</span> <span class="comment"># Python 项目依赖配置</span><br>
+      <span class="file">backend/.python-version</span>  <span class="comment"># Python 3.13 版本锁定</span><br>
+      <span class="file">backend/shared/__init__.py</span><br>
+      <span class="file">backend/shared/types/__init__.py</span><br>
+      <span class="file">backend/shared/types/<span class="dir">strict_model.py</span></span>  <span class="comment"># 严格基础模型 (extra="forbid", camelCase)</span><br>
+      <span class="file">backend/shared/types/<span class="dir">resume.py</span></span>      <span class="comment"># 简历类型定义 (ResumeSchema + 所有板块类型)</span>
+    </div>
+
+    <h3>❓ 为什么先创建这些？</h3>
+    <div class="reason-grid">
+      <div class="cell cell-key">pyproject.toml</div>
+      <div class="cell cell-val">所有 Python 项目的起点。没有它就无法安装依赖、定义工具链、运行任何代码</div>
+      <div class="cell cell-key">.python-version</div>
+      <div class="cell cell-val">锁定 Python 3.13，确保所有开发者和 CI 环境使用一致的版本，避免兼容性问题</div>
+      <div class="cell cell-key">strict_model.py</div>
+      <div class="cell cell-val">整个类型系统的根基。所有业务类型都继承自 StrictBaseModel，它定义了禁止额外字段、自动 camelCase 别名等核心行为。没有它，后续任何数据模型都无法定义</div>
+      <div class="cell cell-key">resume.py</div>
+      <div class="cell cell-val">业务核心类型。简历系统的所有数据结构（ResumeSchema、PersonalInfo、WorkExperience 等 11 种板块类型）都从这里开始</div>
+    </div>
+
+    <h3>🔗 继承链</h3>
+    <div class="dep-list">
+      <span class="dep-item dep-shared">StrictBaseModel</span>
+      <span class="dep-item dep-shared">← ResumeSchema</span>
+      <span class="dep-item dep-shared">← PersonalInfoSection</span>
+      <span class="dep-item dep-shared">← WorkExperienceSection</span>
+      <span class="dep-item dep-shared">← ...其他 9 种板块</span>
+    </div>
+    <div style="margin-top:8px;font-size:13px;color:var(--text-dim);">
+      → strict_model.py 和 resume.py 是整个类型系统的 <strong style="color:var(--cyan)">根节点</strong>，所有后续模块都直接或间接依赖它们
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PHASE 2 -->
+<!-- ============================================================ -->
+<div class="phase">
+  <div class="phase-header">
+    <span class="badge b-mvp">2</span>
+    <span class="title">Parser 模块 — PDF 简历解析（MVP）</span>
+    <span class="date">2026-04-03</span>
+    <span class="layer-tag">第 1 层 · 核心功能</span>
+  </div>
+  <div class="phase-body">
+    <h3>📁 创建的文件</h3>
+    <div class="file-tree">
+      <span class="dir">apps/parser/</span><br>
+      <span class="file">├── __init__.py</span><br>
+      <span class="file">├── <span class="dir">router.py</span></span>    <span class="comment"># API 路由 (POST /parser, POST /parser/retry)</span><br>
+      <span class="file">├── <span class="dir">schemas.py</span></span>   <span class="comment"># 请求/响应模型 (ParserResult)</span><br>
+      <span class="file">├── <span class="dir">pdf_parser.py</span></span> <span class="comment"># PDF 文本提取 (pymupdf)</span><br>
+      <span class="file">├── <span class="dir">prompt.py</span></span>     <span class="comment"># LLM 解析提示词</span><br>
+      <span class="file">├── <span class="dir">call_llm.py</span></span>   <span class="comment"># LLM 调用封装</span><br>
+      <span class="file">├── <span class="dir">storage.py</span></span>    <span class="comment"># 上传文件存储</span><br>
+      <span class="file">└── <span class="dir">service.py</span></span>    <span class="comment"># 业务逻辑 (编排解析流程)</span>
+    </div>
+
+    <h3>❓ 为什么最先实现 parser？</h3>
+    <div class="reason-grid">
+      <div class="cell cell-key">核心功能</div>
+      <div class="cell cell-val">用户的第一个需求是"上传简历 PDF，提取内容"。没有解析功能，其他所有功能都无从谈起</div>
+      <div class="cell cell-key">独立性最强</div>
+      <div class="cell cell-val">parser 不依赖其他业务模块，只需要最基础的类型定义。这降低了初始开发的复杂度</div>
+      <div class="cell cell-key">MVP 思维</div>
+      <div class="cell cell-val">先做最小可用产品（Minimum Viable Product），验证"PDF → 结构化数据"这条核心链路是否可行</div>
+      <div class="cell cell-key">降低风险</div>
+      <div class="cell cell-val">如果 PDF 解析这个关键技术难点无法攻克，整个项目就没必要继续。先做最有风险的部分</div>
+    </div>
+
+    <h3>🔗 依赖关系</h3>
+    <div class="dep-list">
+      <span class="dep-item dep-shared">shared/types/strict_model.py</span>
+      <span class="dep-item dep-shared">shared/types/resume.py</span>
+      <span class="dep-item dep-external">pymupdf</span>
+      <span class="dep-item dep-external">openai / anthropic</span>
+    </div>
+
+    <h3>📐 技术流程</h3>
+    <div class="file-tree" style="font-size:12px;color:var(--text-dim);">
+      用户上传 PDF<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+      <span style="color:var(--text);">pdf_parser.py</span> ← pymupdf 提取文本<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+      <span style="color:var(--text);">call_llm.py + prompt.py</span> ← LLM 解析为非结构化 → 结构化数据<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+      <span style="color:var(--text);">storage.py + service.py</span> ← 创建 Resume + ResumeSection 记录<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+      <span style="color:var(--text);">router.py</span> → 返回 task_id 给前端轮询结果
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PHASE 3 -->
+<!-- ============================================================ -->
+<div class="phase">
+  <div class="phase-header">
+    <span class="badge b-diff">3</span>
+    <span class="title">Resume Assistant — AI 对话优化简历</span>
+    <span class="date">2026-04-05</span>
+    <span class="layer-tag">第 1 层 · 差异化功能</span>
+  </div>
+  <div class="phase-body">
+    <h3>📁 创建的文件</h3>
+    <div class="file-tree">
+      <span class="dir">apps/resume_assistant/</span><br>
+      <span class="file">├── __init__.py</span><br>
+      <span class="file">├── <span class="dir">router.py</span></span>             <span class="comment"># SSE 流式对话 API</span><br>
+      <span class="file">├── <span class="dir">schemas.py</span></span>            <span class="comment"># ChatRequest / ChatResponse</span><br>
+      <span class="file">├── <span class="dir">conversation_store.py</span></span>  <span class="comment"># 对话历史内存存储</span><br>
+      <span class="file">├── <span class="dir">agent_service.py</span></span>       <span class="comment"># Agent 核心服务</span><br>
+      <span class="file">├── <span class="dir">task_service.py</span></span>        <span class="comment"># 后台任务管理</span><br>
+      <span class="file">├── <span class="dir">prompt.py</span></span>              <span class="comment"># 系统提示词</span><br>
+      <span class="file">├── <span class="dir">agent/</span></span>                  <span class="comment"># Agent 核心 (core, runtime, state, context...)</span><br>
+      <span class="file">│</span>   <span class="file">└── core.py, runtime.py, events.py, state.py, ...</span><br>
+      <span class="file">└── <span class="dir">tools/</span></span>                 <span class="comment"># Agent 工具 (section_info, update_section, ...)</span>
+    </div>
+
+    <h3>❓ 为什么第二实现 AI 助手？</h3>
+    <div class="reason-grid">
+      <div class="cell cell-key">差异化功能</div>
+      <div class="cell cell-val">简历工具很多（几乎每个平台都有解析功能），但"AI 对话优化简历"是真正的竞争亮点。先做核心，再做差异</div>
+      <div class="cell cell-key">可利用 parser</div>
+      <div class="cell cell-val">AI 助手需要理解简历结构才能进行优化。parser 已经定义了完整的简历类型体系，助手可以直接复用</div>
+      <div class="cell cell-key">技术复杂度高</div>
+      <div class="cell cell-val">需要 Agent 工具调用循环、SSE 流式推送、对话状态管理——是技术难度最高的模块，尽早攻克为后续功能铺路</div>
+      <div class="cell cell-key">用户价值高</div>
+      <div class="cell cell-val">直接解决了"不知道怎么优化简历"的问题。用户上传简历后，可以立即通过对话获得改进建议</div>
+    </div>
+
+    <h3>🔗 依赖关系</h3>
+    <div class="dep-list">
+      <span class="dep-item dep-shared">shared/types/strict_model.py</span>
+      <span class="dep-item dep-shared">shared/types/resume.py</span>
+      <span class="dep-item dep-shared">shared/types/base_tool.py</span>
+      <span class="dep-item dep-shared">shared/types/messages.py</span>
+      <span class="dep-item dep-external">openai / anthropic</span>
+    </div>
+
+    <div style="margin-top:10px;font-size:13px;color:var(--text-dim);border:1px solid var(--border);border-radius:6px;padding:12px;">
+      <strong style="color:var(--yellow);">📌 注意</strong>：这个阶段 resume_assistant 的 LLM 调用是<strong>各自独立的</strong>（有自己的 call_llm 逻辑）。
+      此时 shared/api/ 客户端尚未提取——这是在阶段 4 重构时才统一的。
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PHASE 4 -->
+<!-- ============================================================ -->
+<div class="phase">
+  <div class="phase-header">
+    <span class="badge b-refactor">4</span>
+    <span class="title">Shared 模块提取 — 架构优化</span>
+    <span class="date">2026-04-07</span>
+    <span class="layer-tag">第 2 层 · 架构重构</span>
+  </div>
+  <div class="phase-body">
+    <h3>📁 创建/重构的文件</h3>
+    <div class="file-tree">
+      <span class="dir">shared/</span><br>
+      <span class="file">├── <span class="dir">database.py</span></span>    <span class="comment"># 异步 SQLAlchemy 引擎 + get_session</span><br>
+      <span class="file">├── <span class="dir">models.py</span></span>      <span class="comment"># ORM 模型 (Resume, ResumeSection, UserConfig, ...)</span><br>
+      <span class="file">├── <span class="dir">api/</span></span><br>
+      <span class="file">│   ├── <span class="dir">client.py</span></span>        <span class="comment"># 统一 LLM 客户端接口</span><br>
+      <span class="file">│   ├── <span class="dir">openai_client.py</span></span> <span class="comment"># OpenAI 兼容实现</span><br>
+      <span class="file">│   ├── <span class="dir">errors.py</span></span>        <span class="comment"># LLM 错误类型</span><br>
+      <span class="file">│   └── <span class="dir">usage.py</span></span>         <span class="comment"># Token 用量跟踪</span><br>
+      <span class="file">├── <span class="dir">exceptions/</span></span><br>
+      <span class="file">│   └── <span class="dir">base.py</span></span>        <span class="comment"># APIException 基类</span><br>
+      <span class="file">└── <span class="dir">types/</span></span><br>
+      <span class="file">    ├── <span class="dir">messages.py</span></span>    <span class="comment"># 对话消息类型</span><br>
+      <span class="file">    ├── <span class="dir">jd_analysis.py</span></span>  <span class="comment"># JD 分析类型</span><br>
+      <span class="file">    ├── <span class="dir">base_tool.py</span></span>    <span class="comment"># Agent 工具类型</span><br>
+      <span class="file">    └── <span class="dir">mixins.py</span></span>       <span class="comment"># API Response Mixin</span>
+    </div>
+
+    <h3>❓ 为什么这时候提取 shared？</h3>
+    <div class="reason-grid">
+      <div class="cell cell-key">发现重复代码</div>
+      <div class="cell cell-val">parser 有自己的 call_llm.py，resume_assistant 也有自己的 LLM 调用逻辑——两套几乎相同的实现</div>
+      <div class="cell cell-key">避免重复累积</div>
+      <div class="cell cell-val">即将开发的 jd_analysis、cover_letter 也都需要调用 LLM。如果现在不统一，后续会重复更多</div>
+      <div class="cell cell-key">依赖关系清晰</div>
+      <div class="cell cell-val">database.py 和 models.py 被所有业务模块依赖，放到 shared 中让依赖方向明确：业务 → shared</div>
+      <div class="cell cell-key">重构最佳时机</div>
+      <div class="cell cell-val">核心功能已跑通、新增功能尚未开始——功能跑通后立即重构，避免技术债累积</div>
+    </div>
+
+    <h3>🔄 重构内容</h3>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;border:1px solid var(--border);border-radius:6px;padding:12px;">
+        <div style="font-size:13px;font-weight:600;color:var(--red);margin-bottom:8px;">重构前</div>
+        <div style="font-size:12px;color:var(--text-dim);">
+          parser/call_llm.py ← 自己的 LLM 调用<br>
+          resume_assistant/ ← 自己的 LLM 调用
+        </div>
+      </div>
+      <div style="flex:1;min-width:200px;border:1px solid var(--border);border-radius:6px;padding:12px;">
+        <div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:8px;">重构后</div>
+        <div style="font-size:12px;color:var(--text-dim);">
+          shared/api/client.py ← 统一 LLM 客户端<br>
+          shared/api/openai_client.py ← OpenAI 兼容实现<br>
+          parser → 调用 shared/api/<br>
+          resume_assistant → 调用 shared/api/
+        </div>
+      </div>
+    </div>
+
+    <h3>🔗 依赖关系</h3>
+    <div class="dep-list">
+      <span class="dep-item dep-shared">shared/database.py → shared/models.py</span>
+      <span class="dep-item dep-shared">shared/models.py → shared/types/*</span>
+      <span class="dep-item dep-shared">shared/api/client.py → shared/api/errors.py</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PHASE 5 -->
+<!-- ============================================================ -->
+<div class="phase">
+  <div class="phase-header">
+    <span class="badge b-infra">5</span>
+    <span class="title">Config 模块 — AI 提供商配置管理</span>
+    <span class="date">2026-04-09</span>
+    <span class="layer-tag">第 2 层 · 基础设施</span>
+  </div>
+  <div class="phase-body">
+    <h3>📁 创建的文件</h3>
+    <div class="file-tree">
+      <span class="dir">apps/config/</span><br>
+      <span class="file">├── __init__.py</span><br>
+      <span class="file">├── <span class="dir">schemas.py</span></span>  <span class="comment"># ProviderConfig, ProviderConfigUpdate, ProviderSwitch</span><br>
+      <span class="file">└── <span class="dir">router.py</span></span>   <span class="comment"># GET/PUT /config/provider, PATCH /config/provider/switch</span>
+    </div>
+
+    <h3>❓ 为什么这时候添加配置模块？</h3>
+    <div class="reason-grid">
+      <div class="cell cell-key">需求驱动</div>
+      <div class="cell cell-val">parser 和 resume_assistant 目前都在硬编码 API Key。用户不可能接受固定某个 API Key</div>
+      <div class="cell cell-key">用户需要配置</div>
+      <div class="cell cell-val">用户需要能自由切换不同的 AI 提供商（OpenAI / Anthropic）、配置不同的模型和 API Key</div>
+      <div class="cell cell-key">简单但重要</div>
+      <div class="cell cell-val">本质上是 key-value 存储（UserConfig 表），没有复杂业务逻辑，实现成本低但收益大</div>
+      <div class="cell cell-key">被依赖方</div>
+      <div class="cell cell-val">所有需要调用 LLM 的模块都依赖配置信息。config 是"被依赖"的模块，应该先于"依赖它的模块"完成</div>
+    </div>
+
+    <h3>🔗 依赖关系</h3>
+    <div class="dep-list">
+      <span class="dep-item dep-shared">shared/database.py</span>
+      <span class="dep-item dep-shared">shared/models.py (UserConfig)</span>
+    </div>
+    <div style="margin-top:8px;font-size:13px;color:var(--text-dim);">
+      ✅ config 不依赖任何其他 apps 模块 → 可以独立开发、独立测试
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PHASE 6 -->
+<!-- ============================================================ -->
+<div class="phase">
+  <div class="phase-header">
+    <span class="badge b-business">6</span>
+    <span class="title">Resume + ResumeSection — 简历管理</span>
+    <span class="date">2026-04-11</span>
+    <span class="layer-tag">第 3 层 · 业务完善</span>
+  </div>
+  <div class="phase-body">
+    <h3>📁 创建的文件</h3>
+    <div class="file-tree">
+      <span class="dir">shared/</span><br>
+      <span class="file">├── <span class="dir">resume_prompt.py</span></span>          <span class="comment"># 简历 LLM 提示词模板</span><br>
+      <span class="file">├── <span class="dir">resume_section_factory.py</span></span>  <span class="comment"># 默认板块工厂</span><br>
+      <span class="file">└── <span class="dir">task_state.py</span></span>              <span class="comment"># 任务状态管理</span><br>
+      <span class="dir">apps/resume/</span><br>
+      <span class="file">├── __init__.py</span><br>
+      <span class="file">├── <span class="dir">router.py</span></span>   <span class="comment"># 简历 CRUD API</span><br>
+      <span class="file">├── <span class="dir">schemas.py</span></span>  <span class="comment"># 请求模型</span><br>
+      <span class="file">└── <span class="dir">service.py</span></span>  <span class="comment"># 创建默认板块、复制板块</span><br>
+      <span class="dir">apps/resume_section/</span><br>
+      <span class="file">├── __init__.py</span><br>
+      <span class="file">└── <span class="dir">router.py</span></span>  <span class="comment"># 板块 CRUD API</span>
+    </div>
+
+    <h3>❓ 为什么这时候添加简历管理？</h3>
+    <div class="reason-grid">
+      <div class="cell cell-key">数据需要管理</div>
+      <div class="cell cell-val">parser 解析出的简历数据需要展示、编辑、组织。没有 resume 模块，用户无法查看和管理自己的简历</div>
+      <div class="cell cell-key">Workspace 概念</div>
+      <div class="cell cell-val">引入了"主简历（workspace）+ 子简历（按 JD 优化）"的概念。这是整个产品的核心数据模型</div>
+      <div class="cell cell-key">自然演进</div>
+      <div class="cell cell-val">parser → 有数据 → 需要管理数据。这是一个自然的产品演进路径</div>
+      <div class="cell cell-key">JD 分析的前提</div>
+      <div class="cell cell-val">JD 匹配分析需要针对具体的简历和职位描述。没有简历管理功能，jd_analysis 无法实现</div>
+    </div>
+
+    <h3>📐 Workspace 架构</h3>
+    <div class="file-tree" style="font-size:13px;">
+      <span class="dir">Workspace（主简历）</span><br>
+      <span class="file">├── 子简历 1（针对 JD A）</span><br>
+      <span class="file">├── 子简历 2（针对 JD B）</span><br>
+      <span class="file">└── 子简历 3（针对 JD C）</span><br><br>
+      <span class="comment"># 每个子简历有独立的板块内容</span><br>
+      <span class="comment"># 但共享主简历的模板和主题</span><br>
+      <span class="comment"># 创建子简历时，从主简历复制所有板块（copy_sections_from_workspace）</span>
+    </div>
+
+    <h3>🔗 依赖关系</h3>
+    <div class="dep-list">
+      <span class="dep-item dep-shared">shared/database.py</span>
+      <span class="dep-item dep-shared">shared/models.py</span>
+      <span class="dep-item dep-shared">shared/types/resume.py</span>
+      <span class="dep-item dep-shared">shared/resume_section_factory.py</span>
+      <span class="dep-item dep-shared">shared/resume_prompt.py</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PHASE 7 -->
+<!-- ============================================================ -->
+<div class="phase">
+  <div class="phase-header">
+    <span class="badge b-business">7</span>
+    <span class="title">JD Analysis — 职位匹配分析</span>
+    <span class="date">2026-04-11</span>
+    <span class="layer-tag">第 3 层 · 业务完善</span>
+  </div>
+  <div class="phase-body">
+    <h3>📁 创建的文件</h3>
+    <div class="file-tree">
+      <span class="dir">apps/jd_analysis/</span><br>
+      <span class="file">├── __init__.py</span><br>
+      <span class="file">├── <span class="dir">router.py</span></span>    <span class="comment"># POST /jd-analysis/analyze</span><br>
+      <span class="file">├── <span class="dir">schemas.py</span></span>   <span class="comment"># AnalyzeJDRequest</span><br>
+      <span class="file">├── <span class="dir">prompt.py</span></span>     <span class="comment"># JD 分析提示词</span><br>
+      <span class="file">├── <span class="dir">call_llm.py</span></span>   <span class="comment"># LLM 调用</span><br>
+      <span class="file">└── <span class="dir">service.py</span></span>    <span class="comment"># 分析逻辑</span>
+    </div>
+
+    <h3>❓ 为什么和 resume 同时添加？</h3>
+    <div class="reason-grid">
+      <div class="cell cell-key">核心需求</div>
+      <div class="cell cell-val">用户不仅需要简历，还需要知道"我的简历和这个职位匹不匹配"。这是简历工具的核心价值</div>
+      <div class="cell cell-key">依赖清晰</div>
+      <div class="cell cell-val">需要简历数据（resume 模块）和职位描述（用户输入）。resume 模块刚搭建好，正好衔接</div>
+      <div class="cell cell-key">技术复用</div>
+      <div class="cell cell-val">和 parser 一样是"LLM 调用 + 结构化输出"模式，可以复用 shared/api/ 的客户端</div>
+      <div class="cell cell-key">独立功能</div>
+      <div class="cell cell-val">可以单独测试和使用，不阻塞其他功能的开发</div>
+    </div>
+
+    <h3>📊 分析输出</h3>
+    <div class="file-tree" style="font-size:13px;">
+      输入：<span style="color:var(--text);">简历内容</span> + <span style="color:var(--text);">职位描述</span><br>
+      输出：<br>
+      <span class="file">├── 总体匹配评分（0-100）</span><br>
+      <span class="file">├── ATS 兼容性评分（0-100）</span><br>
+      <span class="file">├── 关键词匹配列表</span><br>
+      <span class="file">├── 缺失关键词列表</span><br>
+      <span class="file">└── 各板块优化建议</span>
+    </div>
+
+    <h3>🔗 依赖关系</h3>
+    <div class="dep-list">
+      <span class="dep-item dep-shared">shared/api/client.py</span>
+      <span class="dep-item dep-shared">shared/database.py</span>
+      <span class="dep-item dep-shared">shared/models.py</span>
+      <span class="dep-item dep-shared">shared/types/jd_analysis.py</span>
+      <span class="dep-item dep-apps">apps/resume/</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PHASE 8 -->
+<!-- ============================================================ -->
+<div class="phase">
+  <div class="phase-header">
+    <span class="badge b-value">8</span>
+    <span class="title">Cover Letter + Conversation Message — 增值功能</span>
+    <span class="date">2026-04-15</span>
+    <span class="layer-tag">第 3 层 · 增值功能</span>
+  </div>
+  <div class="phase-body">
+    <h3>📁 创建的文件</h3>
+    <div class="file-tree">
+      <span class="dir">apps/cover_letter/</span><br>
+      <span class="file">├── __init__.py</span><br>
+      <span class="file">├── <span class="dir">router.py</span></span>   <span class="comment"># SSE 流式生成求职信</span><br>
+      <span class="file">├── <span class="dir">schemas.py</span></span>  <span class="comment"># CoverLetterRequest</span><br>
+      <span class="file">├── <span class="dir">prompt.py</span></span>    <span class="comment"># 求职信提示词</span><br>
+      <span class="file">└── <span class="dir">service.py</span></span>   <span class="comment"># 生成逻辑</span><br>
+      <span class="dir">apps/conversation_message/</span><br>
+      <span class="file">├── __init__.py</span><br>
+      <span class="file">└── <span class="dir">router.py</span></span>  <span class="comment"># 查询历史对话消息</span>
+    </div>
+
+    <h3>❓ 为什么这时候添加？</h3>
+    <div class="reason-grid">
+      <div class="cell cell-key">周边功能</div>
+      <div class="cell cell-val">求职信生成不是简历工具的核心功能，是增值功能。核心功能（解析、AI 优化、JD 分析）已经完成</div>
+      <div class="cell cell-key">用户场景完整</div>
+      <div class="cell cell-val">有简历了，针对特定职位分析了，下一步自然是生成配套材料（求职信）。产品工作流闭环</div>
+      <div class="cell cell-key">时间节点</div>
+      <div class="cell cell-val">核心功能稳定后，开始完善周边功能。这是"从可用到好用"的阶段</div>
+    </div>
+
+    <h3>🔗 依赖关系</h3>
+    <div class="dep-list">
+      <span class="dep-item dep-shared">shared/api/client.py</span>
+      <span class="dep-item dep-shared">shared/database.py</span>
+      <span class="dep-item dep-shared">shared/models.py</span>
+      <span class="dep-item dep-shared">shared/types/cover_letter.py</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PHASE 9 -->
+<!-- ============================================================ -->
+<div class="phase">
+  <div class="phase-header">
+    <span class="badge b-refactor">9</span>
+    <span class="title">Work 任务系统 — 统一异步任务管理</span>
+    <span class="date">2026-04-16</span>
+    <span class="layer-tag">第 2 层 · 基础设施重构</span>
+  </div>
+  <div class="phase-body">
+    <h3>📁 创建的文件</h3>
+    <div class="file-tree">
+      <span class="dir">apps/work/</span><br>
+      <span class="file">├── __init__.py</span><br>
+      <span class="file">├── <span class="dir">router.py</span></span>  <span class="comment"># 任务 CRUD API</span><br>
+      <span class="file">└── <span class="dir">sse.py</span></span>     <span class="comment"># SSE 流式任务状态推送</span><br>
+      <span class="dir">shared/</span><br>
+      <span class="file">└── <span class="dir">task_state.py</span></span>  <span class="comment"># 内存任务状态管理</span><br>
+      <span class="dir">shared/types/</span><br>
+      <span class="file">├── <span class="dir">work.py</span></span>  <span class="comment"># WorkTaskSchema</span><br>
+      <span class="file">└── <span class="dir">task.py</span></span>  <span class="comment"># TaskStatus / TaskType 枚举</span>
+    </div>
+
+    <h3>❓ 为什么需要任务系统？</h3>
+    <div class="reason-grid">
+      <div class="cell cell-key">异步任务</div>
+      <div class="cell cell-val">JD 分析、求职信生成、PDF 导出都是耗时操作（几秒到十几秒），不能同步等待</div>
+      <div class="cell cell-key">状态追踪</div>
+      <div class="cell cell-val">用户需要知道任务进度：pending → running → success/error。没有任务系统，前端无法得知状态</div>
+      <div class="cell cell-key">SSE 推送</div>
+      <div class="cell cell-val">实时将任务状态变化推送给前端，而不是让前端轮询。提供更好的用户体验</div>
+      <div class="cell cell-key">统一管理</div>
+      <div class="cell cell-val">parser、jd_analysis、cover_letter、export 都需要异步任务管理。统一设计避免各自为政</div>
+    </div>
+
+    <h3>📐 任务状态机</h3>
+    <div class="file-tree" style="font-size:13px;text-align:center;">
+      <span style="color:var(--yellow);">pending</span> → <span style="color:var(--blue);">running</span> → <span style="color:var(--green);">success</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--red);">error</span>
+    </div>
+
+    <h3>🔗 依赖关系</h3>
+    <div class="dep-list">
+      <span class="dep-item dep-shared">shared/task_state.py</span>
+      <span class="dep-item dep-shared">shared/types/task.py</span>
+      <span class="dep-item dep-shared">shared/types/work.py</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PHASE 10 -->
+<!-- ============================================================ -->
+<div class="phase">
+  <div class="phase-header">
+    <span class="badge b-output">10</span>
+    <span class="title">Export — PDF 导出</span>
+    <span class="date">2026-04-23</span>
+    <span class="layer-tag">第 3 层 · 输出闭环</span>
+  </div>
+  <div class="phase-body">
+    <h3>📁 创建的文件</h3>
+    <div class="file-tree">
+      <span class="dir">apps/export/</span><br>
+      <span class="file">├── __init__.py</span><br>
+      <span class="file">├── <span class="dir">router.py</span></span>          <span class="comment"># POST /export/pdf</span><br>
+      <span class="file">├── <span class="dir">browser_manager.py</span></span> <span class="comment"># Playwright 浏览器管理</span><br>
+      <span class="file">├── <span class="dir">pdf_generator.py</span></span>   <span class="comment"># HTML → PDF 渲染</span><br>
+      <span class="file">└── <span class="dir">service.py</span></span>         <span class="comment"># 导出业务逻辑</span>
+    </div>
+
+    <h3>❓ 为什么快最后才添加导出？</h3>
+    <div class="reason-grid">
+      <div class="cell cell-key">用户价值高</div>
+      <div class="cell cell-val">简历最终需要导出为 PDF/HTML/TXT/JSON，但这是"输出"环节——前提是内容已经完善</div>
+      <div class="cell cell-key">技术复杂</div>
+      <div class="cell cell-val">需要 Playwright 浏览器管理、HTML 渲染为 PDF、浏览器生命周期管理。引入了一个复杂的系统依赖</div>
+      <div class="cell cell-key">依赖其他模块</div>
+      <div class="cell cell-val">需要完整的简历数据（resume + resume_section）才能导出。这些数据在此之前才就绪</div>
+      <div class="cell cell-key">核心功能优先</div>
+      <div class="cell cell-val">在导出之前，必须先确保"导出什么"是正确的——即解析、优化、分析的功能已经完善</div>
+    </div>
+
+    <h3>📐 技术流程</h3>
+    <div class="file-tree" style="font-size:12px;color:var(--text-dim);">
+      HTML 模板（前端渲染）<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+      <span style="color:var(--text);">service.py</span> 请求后端导出<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+      <span style="color:var(--text);">browser_manager.py</span> 获取/启动 Playwright Chromium<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+      <span style="color:var(--text);">pdf_generator.py</span> 渲染 HTML 为 PDF<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+      返回 PDF 文件给前端下载
+    </div>
+
+    <h3>🔗 依赖关系</h3>
+    <div class="dep-list">
+      <span class="dep-item dep-shared">shared/database.py</span>
+      <span class="dep-item dep-shared">shared/models.py</span>
+      <span class="dep-item dep-apps">apps/resume/</span>
+      <span class="dep-item dep-external">Playwright (Chromium)</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PHASE 11 -->
+<!-- ============================================================ -->
+<div class="phase">
+  <div class="phase-header">
+    <span class="badge b-foundation">11</span>
+    <span class="title">Template 模块 — 模板管理</span>
+    <span class="date">2026-04-25</span>
+    <span class="layer-tag">第 3 层 · 收尾</span>
+  </div>
+  <div class="phase-body">
+    <h3>📁 创建的文件</h3>
+    <div class="file-tree">
+      <span class="dir">apps/template/</span><br>
+      <span class="file">├── __init__.py</span><br>
+      <span class="file">└── <span class="dir">router.py</span></span>  <span class="comment"># 模板 CRUD API</span><br>
+      <span class="dir">shared/types/</span><br>
+      <span class="file">└── <span class="dir">template.py</span></span>  <span class="comment"># TemplateSchema</span>
+    </div>
+
+    <h3>❓ 为什么最后添加模板管理？</h3>
+    <div class="reason-grid">
+      <div class="cell cell-key">可选功能</div>
+      <div class="cell cell-val">可以用固定模板硬编码，不需要完整的管理系统。模板管理是"有更好"而非"必须有"的功能</div>
+      <div class="cell cell-key">优先级低</div>
+      <div class="cell cell-val">先把简历功能做好、做完善，再考虑让用户选择不同的模板风格</div>
+      <div class="cell cell-key">依赖数据</div>
+      <div class="cell cell-val">需要先有简历数据和板块结构，才能定义模板的结构和渲染逻辑</div>
+    </div>
+
+    <h3>🔗 依赖关系</h3>
+    <div class="dep-list">
+      <span class="dep-item dep-shared">shared/database.py</span>
+      <span class="dep-item dep-shared">shared/models.py</span>
+      <span class="dep-item dep-shared">shared/types/template.py</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PHASE 12 -->
+<!-- ============================================================ -->
+<div class="phase">
+  <div class="phase-header">
+    <span class="badge b-foundation">12</span>
+    <span class="title">Main.py — 应用入口组装</span>
+    <span class="date">最后</span>
+    <span class="layer-tag">第 0 层 · 入口</span>
+  </div>
+  <div class="phase-body">
+    <h3>📁 创建的文件</h3>
+    <div class="file-tree">
+      <span class="file">backend/<span class="dir">main.py</span></span>  <span class="comment"># FastAPI 应用入口</span>
+    </div>
+
+    <h3>❓ 为什么最后组装？</h3>
+    <div class="reason-grid">
+      <div class="cell cell-key">模块化开发</div>
+      <div class="cell cell-val">先让每个模块独立开发、独立测试。最后再将所有模块注册到主应用</div>
+      <div class="cell cell-key">迭代式注册</div>
+      <div class="cell cell-val">可以先只注册部分模块测试，不用等所有功能完成再启动</div>
+      <div class="cell cell-key">统一入口</div>
+      <div class="cell cell-val">集中管理 CORS 配置、lifespan 生命周期（数据库初始化、浏览器启动）、日志配置</div>
+    </div>
+
+    <h3>📐 main.py 结构</h3>
+    <div class="file-tree" style="font-size:13px;">
+      <span style="color:var(--blue);"># 导入所有模块路由</span><br>
+      from apps.config import router as config_router<br>
+      from apps.parser import router as parser_router<br>
+      from apps.resume import router as resume_router<br>
+      from apps.resume_section import router as resume_section_router<br>
+      from apps.jd_analysis import router as jd_analysis_router<br>
+      from apps.cover_letter import router as cover_letter_router<br>
+      from apps.resume_assistant import router as resume_assistant_router<br>
+      from apps.conversation_message import router as conversation_message_router<br>
+      from apps.export import router as export_router<br>
+      from apps.template import router as template_router<br>
+      from apps.work import router as work_router<br><br>
+      <span style="color:var(--blue);"># 生命周期</span><br>
+      async def lifespan(app):<br>
+      &nbsp;&nbsp;await init_db()&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--text-dim);"># 启动时初始化 SQLite</span><br>
+      &nbsp;&nbsp;ensure_browser()&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--text-dim);"># 启动 Playwright Chromium</span><br>
+      &nbsp;&nbsp;yield<br>
+      &nbsp;&nbsp;<span style="color:var(--text-dim);"># 关闭时清理资源</span><br><br>
+      <span style="color:var(--blue);"># CORS 配置</span><br>
+      app.add_middleware(CORSMiddleware, allow_origins=["*"], ...)
+    </div>
+
+    <h3>🔗 依赖关系</h3>
+    <div class="dep-list">
+      <span class="dep-item dep-apps">apps/config</span>
+      <span class="dep-item dep-apps">apps/parser</span>
+      <span class="dep-item dep-apps">apps/resume</span>
+      <span class="dep-item dep-apps">apps/resume_section</span>
+      <span class="dep-item dep-apps">apps/jd_analysis</span>
+      <span class="dep-item dep-apps">apps/cover_letter</span>
+      <span class="dep-item dep-apps">apps/resume_assistant</span>
+      <span class="dep-item dep-apps">apps/conversation_message</span>
+      <span class="dep-item dep-apps">apps/export</span>
+      <span class="dep-item dep-apps">apps/template</span>
+      <span class="dep-item dep-apps">apps/work</span>
+      <span class="dep-item dep-shared">shared/database.py</span>
+      <span class="dep-item dep-external">FastAPI</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- FULL DEPENDENCY GRAPH -->
+<!-- ============================================================ -->
+<div class="phase">
+  <div class="phase-header" style="border-bottom:none;">
+    <span class="badge b-refactor" style="background:#2d2d2d;">∑</span>
+    <span class="title">完整依赖关系图</span>
+  </div>
+  <div class="phase-body">
+    <div class="file-tree" style="font-size:13px;line-height:2;">
+      <span style="color:var(--cyan);">第 0 层（基础设施）</span><br>
+      <span class="file">├── shared/types/strict_model.py</span><br>
+      <span class="file">├── shared/types/resume.py</span><br>
+      <span class="file">├── pyproject.toml / .python-version</span><br>
+      <br>
+      <span style="color:var(--cyan);">第 1 层（共享工具 — 被所有 apps 依赖）</span><br>
+      <span class="file">├── shared/models.py → shared/types/*</span><br>
+      <span class="file">├── shared/database.py → shared/models.py</span><br>
+      <span class="file">├── shared/api/client.py → shared/api/errors.py</span><br>
+      <span class="file">├── shared/exceptions/</span><br>
+      <span class="file">├── shared/task_state.py</span><br>
+      <span class="file">├── shared/resume_section_factory.py</span><br>
+      <span class="file">└── shared/resume_prompt.py</span><br>
+      <br>
+      <span style="color:var(--cyan);">第 2 层（独立模块 — 不依赖其他 apps）</span><br>
+      <span class="file">├── apps/config/ → shared/database, shared/models</span><br>
+      <span class="file">└── apps/template/ → shared/database, shared/models</span><br>
+      <br>
+      <span style="color:var(--cyan);">第 3 层（业务模块 — 依赖 shared + config）</span><br>
+      <span class="file">├── apps/parser/ → shared/* + shared/api/</span><br>
+      <span class="file">├── apps/resume/ → shared/*</span><br>
+      <span class="file">├── apps/resume_section/ → shared/*</span><br>
+      <span class="file">├── apps/conversation_message/ → shared/*</span><br>
+      <span class="file">└── apps/work/ → shared/*</span><br>
+      <br>
+      <span style="color:var(--cyan);">第 4 层（依赖其他 apps 的模块）</span><br>
+      <span class="file">├── apps/jd_analysis/ → shared/* + apps/resume/</span><br>
+      <span class="file">├── apps/cover_letter/ → shared/* + shared/api/</span><br>
+      <span class="file">├── apps/resume_assistant/ → shared/* + shared/api/ + apps/resume/ + apps/resume_section/</span><br>
+      <span class="file">└── apps/export/ → shared/* + apps/resume/</span><br>
+      <br>
+      <span style="color:var(--cyan);">入口</span><br>
+      <span class="file">└── main.py → 所有 apps + shared/database</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- TIMELINE SUMMARY -->
+<!-- ============================================================ -->
+<div class="phase">
+  <div class="phase-header" style="border-bottom:none;">
+    <span class="badge b-mvp" style="background:#2d2d2d;">⏱</span>
+    <span class="title">完整时间线总结</span>
+  </div>
+  <div class="phase-body">
+    <table class="summary-table">
+      <thead>
+        <tr>
+          <th style="width:40px;">#</th>
+          <th style="width:100px;">日期</th>
+          <th style="width:160px;">模块</th>
+          <th>原因</th>
+          <th style="width:60px;">层</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="color:var(--cyan);">1</td>
+          <td>04-02</td>
+          <td><strong>项目结构</strong></td>
+          <td>所有项目的起点，锁定 Python 版本和依赖，定义类型系统根节点</td>
+          <td>L0</td>
+        </tr>
+        <tr>
+          <td style="color:var(--red);">2</td>
+          <td>04-03</td>
+          <td><strong>Parser</strong></td>
+          <td>MVP 核心：PDF → 结构化数据。独立性最强，风险最高，先攻克</td>
+          <td>L1</td>
+        </tr>
+        <tr>
+          <td style="color:var(--yellow);">3</td>
+          <td>04-05</td>
+          <td><strong>Resume Assistant</strong></td>
+          <td>差异化功能：AI 对话优化。技术最复杂，尽早攻克为后续铺路</td>
+          <td>L1</td>
+        </tr>
+        <tr>
+          <td style="color:var(--blue);">4</td>
+          <td>04-07</td>
+          <td><strong>Shared</strong></td>
+          <td>重构提取：消除重复代码，统一 LLM 客户端、数据库、ORM 模型</td>
+          <td>L2</td>
+        </tr>
+        <tr>
+          <td style="color:var(--green);">5</td>
+          <td>04-09</td>
+          <td><strong>Config</strong></td>
+          <td>基础设施：AI 提供商配置管理。被所有 LLM 模块依赖，先实现</td>
+          <td>L2</td>
+        </tr>
+        <tr>
+          <td style="color:var(--purple);">6</td>
+          <td>04-11</td>
+          <td><strong>Resume + Section</strong></td>
+          <td>业务完善：简历 CRUD + Workspace 概念。parser 有数据后需要管理</td>
+          <td>L3</td>
+        </tr>
+        <tr>
+          <td style="color:var(--purple);">7</td>
+          <td>04-11</td>
+          <td><strong>JD Analysis</strong></td>
+          <td>业务完善：职位匹配分析。需要 resume 模块提供简历数据</td>
+          <td>L3</td>
+        </tr>
+        <tr>
+          <td style="color:var(--orange);">8</td>
+          <td>04-15</td>
+          <td><strong>Cover Letter</strong></td>
+          <td>增值功能：求职信生成。核心功能完成后完善周边</td>
+          <td>L3</td>
+        </tr>
+        <tr>
+          <td style="color:var(--orange);">9</td>
+          <td>04-16</td>
+          <td><strong>Work</strong></td>
+          <td>基础设施重构：统一异步任务系统。多个模块需要任务管理</td>
+          <td>L2</td>
+        </tr>
+        <tr>
+          <td style="color:var(--pink);">10</td>
+          <td>04-23</td>
+          <td><strong>Export</strong></td>
+          <td>输出闭环：PDF 导出。需要完整简历数据，技术复杂</td>
+          <td>L3</td>
+        </tr>
+        <tr>
+          <td style="color:var(--cyan);">11</td>
+          <td>04-25</td>
+          <td><strong>Template</strong></td>
+          <td>收尾：模板管理。可选功能，优先级最低</td>
+          <td>L3</td>
+        </tr>
+        <tr>
+          <td style="color:var(--cyan);">12</td>
+          <td>最后</td>
+          <td><strong>Main.py</strong></td>
+          <td>入口组装：注册路由、配置 CORS、生命周期</td>
+          <td>L0</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PRINCIPLES -->
+<!-- ============================================================ -->
+<div class="phase">
+  <div class="phase-header" style="border-bottom:none;">
+    <span class="badge b-diff" style="background:#2d2d2d;">◆</span>
+    <span class="title">核心构建理念</span>
+  </div>
+  <div class="phase-body">
+    <div class="principle-grid">
+      <div class="principle-card" style="border-left:3px solid var(--red);">
+        <h4 style="color:var(--red);">MVP 思维</h4>
+        <p>先做核心功能（PDF 解析 - parser），再完善周边（求职信、模板管理）。每个阶段都能交付可用的产品。</p>
+      </div>
+      <div class="principle-card" style="border-left:3px solid var(--blue);">
+        <h4 style="color:var(--blue);">依赖驱动</h4>
+        <p>先实现被依赖的模块（shared/types → shared/database → shared/api → config → 业务 apps），再实现依赖别人的。</p>
+      </div>
+      <div class="principle-card" style="border-left:3px solid var(--yellow);">
+        <h4 style="color:var(--yellow);">重构时机</h4>
+        <p>功能跑通后立即重构（phase 4 提取 shared）。避免技术债累积，越早重构成本越低。</p>
+      </div>
+      <div class="principle-card" style="border-left:3px solid var(--green);">
+        <h4 style="color:var(--green);">用户价值</h4>
+        <p>高价值功能优先（parser → resume_assistant → jd_analysis），低价值功能靠后（template）。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /content -->
+
+<div class="footer">
+  Chiren Backend Architecture Analysis · Generated from git history + code analysis<br>
+  <span style="font-size:12px;">Python 3.13+ · FastAPI · SQLAlchemy async · SQLite · Playwright</span>
+</div>
+
+</body>
+</html>

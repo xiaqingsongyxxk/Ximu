@@ -1,0 +1,184 @@
+backend/
+  │
+  ├── 2026-04-02  初始化项目结构
+  │
+  ├── 2026-04-03  parser/ 简历 PDF 解析模块
+  │   │
+  │   ├── pyproject.toml                     项目依赖配置
+  │   │
+  │   └── shared/
+  │       ├── __init__.py                    shared 包初始化
+  │       └── types/
+  │           ├── __init__.py                types 包初始化
+  │           ├── strict_model.py            严格基础模型（禁止额外字段、自动 camelCase）
+  │           └── resume.py                  简历类型定义（ResumeSchema、各板块 Section 类型）
+  │   │
+  │   └── apps/
+  │       ├── __init__.py                    apps 包初始化
+  │       └── parser/
+  │           ├── __init__.py                parser 包初始化
+  │           ├── router.py                  解析 API 路由（上传 PDF 解析）
+  │           ├── schemas.py                 解析请求/响应模型（ParseResumeRequest）
+  │           ├── pdf_parser.py              PDF 文本提取（pymupdf）
+  │           ├── prompt.py                  LLM prompt 模板（PDF 解析提示词）
+  │           ├── call_llm.py                LLM 调用封装
+  │           ├── storage.py                 解析结果存储
+  │           └── service.py                 解析业务逻辑
+  │
+  ├── 2026-04-05  resume_assistant/ AI 对话优化简历模块（初版）
+  │   │
+  │   └── apps/
+  │       └── resume_assistant/
+  │           ├── __init__.py                resume_assistant 包初始化
+  │           ├── router.py                  助手 API 路由（SSE 流式对话）
+  │           ├── schemas.py                 助手数据模型（ChatRequest、ChatResponse）
+  │           ├── conversation_store.py      对话状态存储（内存，保存对话历史）
+  │           ├── agent_service.py           Agent 服务（AI 对话核心，工具调用）
+  │           ├── task_service.py            任务服务（后台任务管理、SSE 流式）
+  │           ├── prompt.py                  LLM prompt 模板（助手系统提示词）
+  │           │
+  │           ├── agent/                      Agent 核心组件
+  │           │   ├── __init__.py            导出
+  │           │   ├── core.py                Agent 核心逻辑（工具调用循环）
+  │           │   ├── runtime.py             运行时管理（消息处理、工具执行）
+  │           │   ├── events.py              事件定义（SSE 事件类型）
+  │           │   ├── state.py               Agent 状态管理（RunningState）
+  │           │   ├── context.py             上下文管理（构建、压缩）
+  │           │   ├── formatters.py          输出格式化（工具结果格式化）
+  │           │   └── compact.py             上下文压缩（对话历史压缩策略）
+  │           │
+  │           └── tools/                     Agent 可用工具
+  │               ├── __init__.py            导出
+  │               ├── section_info.py         获取板块信息工具（get_section_info）
+  │               ├── update_section.py      更新简历板块工具（update_section）
+  │               ├── add_section.py         添加简历板块工具（add_section）
+  │               └── translate_resume.py    简历翻译工具（translate_resume）
+  │
+  ├── 2026-04-07  shared/ 共享模块提取重构
+  │   │
+  │   └── shared/
+  │       ├── database.py                    数据库连接、引擎、会话工厂、get_session 依赖注入函数
+  │       │
+  │       ├── models.py                      SQLAlchemy ORM 模型定义（Resume、ResumeSection、UserConfig 等）
+  │       │
+  │       ├── api/                           LLM API 客户端封装
+  │       │   ├── __init__.py                导出 get_client 函数
+  │       │   ├── client.py                  API 客户端基类、事件类型定义
+  │       │   ├── openai_client.py           OpenAI 兼容 API 客户端实现
+  │       │   ├── errors.py                  API 错误定义
+  │       │   └── usage.py                   Token 用量追踪
+  │       │
+  │       ├── exceptions/                    异常定义
+  │       │   ├── __init__.py                导出
+  │       │   └── base.py                    基础异常类（APIException）
+  │       │
+  │       └── types/
+  │           ├── messages.py                LLM 对话消息类型（TextBlock、ToolUseBlock、ConversationMessage）
+  │           ├── jd_analysis.py             JD 分析相关类型（SuggestionItem、JobDescriptionAnalysisSchema）
+  │           ├── base_tool.py               Agent 工具基础类型定义
+  │           └── mixins.py                  混入类（API Response Mixin）
+  │
+  ├── 2026-04-09  config/ AI 提供商配置管理模块
+  │   │
+  │   └── apps/
+  │       └── config/
+  │           ├── __init__.py                config 包初始化
+  │           ├── schemas.py                 配置 Pydantic 模型（ProviderConfig、ProviderConfigUpdate）
+  │           └── router.py                  配置 API 路由（获取/更新/切换 Provider）
+  │
+  ├── 2026-04-11  resume/ 和 resume_section/ 简历管理模块
+  │   │
+  │   ├── shared/
+  │   │   ├── resume_prompt.py               简历相关的 LLM prompt 模板（解析、生成）
+  │   │   │
+  │   │   ├── resume_section_factory.py      简历板块工厂（创建默认板块结构）
+  │   │   │
+  │   │   └── task_state.py                  任务状态管理（内存存储，追踪异步任务进度）
+  │   │
+  │   └── apps/
+  │       ├── resume/
+  │       │   ├── __init__.py               resume 包初始化
+  │       │   ├── router.py                 简历 API 路由（创建/查询/更新/删除）
+  │       │   ├── schemas.py                创建简历请求模型（CreateWorkspaceRequest、CreateSubResumeRequest）
+  │       │   └── service.py                简历业务逻辑（创建默认板块、复制板块）
+  │       │
+  │       └── resume_section/
+  │           ├── __init__.py               resume_section 包初始化
+  │           └── router.py                 板块 API 路由（查询/创建/更新/删除/排序）
+  │
+  ├── 2026-04-11  jd_analysis/ JD 匹配分析模块
+  │   │
+  │   └── apps/
+  │       └── jd_analysis/
+  │           ├── __init__.py               jd_analysis 包初始化
+  │           ├── router.py                 分析 API 路由（分析简历与 JD 匹配度）
+  │           ├── schemas.py                分析请求/响应模型（AnalyzeJDRequest）
+  │           ├── prompt.py                 LLM prompt 模板（JD 分析提示词）
+  │           ├── call_llm.py               LLM 调用封装
+  │           └── service.py                分析业务逻辑
+  │
+  ├── 2026-04-15  cover_letter/ 求职信生成模块
+  │   │
+  │   ├── shared/
+  │   │   └── types/
+  │   │       └── cover_letter.py           求职信类型定义（CoverLetterRequest）
+  │   │
+  │   └── apps/
+  │       └── cover_letter/
+  │           ├── __init__.py              cover_letter 包初始化
+  │           ├── router.py                求职信 API 路由（SSE 流式响应）
+  │           ├── schemas.py               求职信请求模型（CoverLetterRequest）
+  │           ├── prompt.py                LLM prompt 模板（求职信生成提示词）
+  │           └── service.py               求职信业务逻辑（SSE 流式生成）
+  │
+  ├── 2026-04-15  conversation_message/ 对话消息管理
+  │   │
+  │   └── apps/
+  │       └── conversation_message/
+  │           ├── __init__.py              conversation_message 包初始化
+  │           └── router.py                消息 API 路由（查询历史消息、导出 Markdown）
+  │
+  ├── 2026-04-16  work/ 任务系统重构
+  │   │
+  │   ├── shared/
+  │   │   └── types/
+  │   │       ├── work.py                  工作任务类型定义（WorkTaskSchema）
+  │   │       └── task.py                  任务相关类型定义（TaskStatus）
+  │   │
+  │   └── apps/
+  │       └── work/
+  │           ├── __init__.py             work 包初始化
+  │           ├── router.py               任务 API 路由（创建/查询任务状态）
+  │           └── sse.py                  SSE 流式任务状态（任务进度推送）
+  │
+  ├── 2026-04-22  resume_assistant/agent/ Agent 核心模块完善
+  │   │
+  │   └── apps/
+  │       └── resume_assistant/
+  │           └── agent/
+  │               └── (已在上方列出)
+  │
+  ├── 2026-04-23  export/ PDF 导出模块
+  │   │
+  │   └── apps/
+  │       └── export/
+  │           ├── __init__.py             export 包初始化
+  │           ├── router.py               导出 API 路由（生成 PDF）
+  │           ├── browser_manager.py      Playwright 浏览器管理（启动、关闭、复用）
+  │           ├── pdf_generator.py        PDF 生成器（Playwright 渲染 HTML 为 PDF）
+  │           └── service.py             导出业务逻辑
+  │
+  ├── 2026-04-25  收尾
+  │   │
+  │   ├── shared/
+  │   │   └── types/
+  │   │       └── template.py             模板类型定义（TemplateSchema）
+  │   │
+  │   └── apps/
+  │       └── template/
+  │           ├── __init__.py            template 包初始化
+  │           └── router.py              模板 API 路由（查询/创建/更新模板）
+  │
+  └── main.py  应用入口（最后组装）
+      │
+      └── main.py                        FastAPI 应用入口，注册所有路由、中间件、生命周期

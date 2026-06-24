@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>顺序</title>
+<style>
+body { font-family: monospace; background: #1e1e1e; color: #ccc; padding: 20px; }
+.red { color: #ff6b6b; }
+.green { color: #98c379; }
+.yellow { color: #e5c07b; }
+.cyan { color: #56b6c2; }
+</style>
+</head>
+<body>
+<pre>
+<span class="cyan">backend/</span>
+  │
+  ├── <span class="red">2026-04-02</span>  <span class="green">初始化项目结构</span>
+  │
+  ├── <span class="red">2026-04-03</span>  <span class="green">parser/ 简历 PDF 解析模块</span>
+  │   │
+  │   ├── <span class="yellow">pyproject.toml</span>                     项目依赖配置
+  │   │
+  │   └── <span class="cyan">shared/</span>
+  │       ├── <span class="yellow">__init__.py</span>                    shared 包初始化
+  │       └── <span class="cyan">types/</span>
+  │           ├── <span class="yellow">__init__.py</span>                types 包初始化
+  │           ├── <span class="yellow">strict_model.py</span>            严格基础模型（禁止额外字段、自动 camelCase）
+  │           └── <span class="yellow">resume.py</span>                  简历类型定义（ResumeSchema、各板块 Section 类型）
+  │   │
+  │   └── <span class="cyan">apps/</span>
+  │       ├── <span class="yellow">__init__.py</span>                    apps 包初始化
+  │       └── <span class="cyan">parser/</span>
+  │           ├── <span class="yellow">__init__.py</span>                parser 包初始化
+  │           ├── <span class="yellow">router.py</span>                  解析 API 路由（上传 PDF 解析）
+  │           ├── <span class="yellow">schemas.py</span>                 解析请求/响应模型（ParseResumeRequest）
+  │           ├── <span class="yellow">pdf_parser.py</span>              PDF 文本提取（pymupdf）
+  │           ├── <span class="yellow">prompt.py</span>                  LLM prompt 模板（PDF 解析提示词）
+  │           ├── <span class="yellow">call_llm.py</span>                LLM 调用封装
+  │           ├── <span class="yellow">storage.py</span>                 解析结果存储
+  │           └── <span class="yellow">service.py</span>                 解析业务逻辑
+  │
+  ├── <span class="red">2026-04-05</span>  <span class="green">resume_assistant/ AI 对话优化简历模块（初版）</span>
+  │   │
+  │   └── <span class="cyan">apps/</span>
+  │       └── <span class="cyan">resume_assistant/</span>
+  │           ├── <span class="yellow">__init__.py</span>                resume_assistant 包初始化
+  │           ├── <span class="yellow">router.py</span>                  助手 API 路由（SSE 流式对话）
+  │           ├── <span class="yellow">schemas.py</span>                 助手数据模型（ChatRequest、ChatResponse）
+  │           ├── <span class="yellow">conversation_store.py</span>      对话状态存储（内存，保存对话历史）
+  │           ├── <span class="yellow">agent_service.py</span>           Agent 服务（AI 对话核心，工具调用）
+  │           ├── <span class="yellow">task_service.py</span>            任务服务（后台任务管理、SSE 流式）
+  │           ├── <span class="yellow">prompt.py</span>                  LLM prompt 模板（助手系统提示词）
+  │           │
+  │           ├── <span class="cyan">agent/</span>                      Agent 核心组件
+  │           │   ├── <span class="yellow">__init__.py</span>            导出
+  │           │   ├── <span class="yellow">core.py</span>                Agent 核心逻辑（工具调用循环）
+  │           │   ├── <span class="yellow">runtime.py</span>             运行时管理（消息处理、工具执行）
+  │           │   ├── <span class="yellow">events.py</span>              事件定义（SSE 事件类型）
+  │           │   ├── <span class="yellow">state.py</span>               Agent 状态管理（RunningState）
+  │           │   ├── <span class="yellow">context.py</span>             上下文管理（构建、压缩）
+  │           │   ├── <span class="yellow">formatters.py</span>          输出格式化（工具结果格式化）
+  │           │   └── <span class="yellow">compact.py</span>             上下文压缩（对话历史压缩策略）
+  │           │
+  │           └── <span class="cyan">tools/</span>                     Agent 可用工具
+  │               ├── <span class="yellow">__init__.py</span>            导出
+  │               ├── <span class="yellow">section_info.py</span>         获取板块信息工具（get_section_info）
+  │               ├── <span class="yellow">update_section.py</span>      更新简历板块工具（update_section）
+  │               ├── <span class="yellow">add_section.py</span>         添加简历板块工具（add_section）
+  │               └── <span class="yellow">translate_resume.py</span>    简历翻译工具（translate_resume）
+  │
+  ├── <span class="red">2026-04-07</span>  <span class="green">shared/ 共享模块提取重构</span>
+  │   │
+  │   └── <span class="cyan">shared/</span>
+  │       ├── <span class="yellow">database.py</span>                    数据库连接、引擎、会话工厂、get_session 依赖注入函数
+  │       │
+  │       ├── <span class="yellow">models.py</span>                      SQLAlchemy ORM 模型定义（Resume、ResumeSection、UserConfig 等）
+  │       │
+  │       ├── <span class="cyan">api/</span>                           LLM API 客户端封装
+  │       │   ├── <span class="yellow">__init__.py</span>                导出 get_client 函数
+  │       │   ├── <span class="yellow">client.py</span>                  API 客户端基类、事件类型定义
+  │       │   ├── <span class="yellow">openai_client.py</span>           OpenAI 兼容 API 客户端实现
+  │       │   ├── <span class="yellow">errors.py</span>                  API 错误定义
+  │       │   └── <span class="yellow">usage.py</span>                   Token 用量追踪
+  │       │
+  │       ├── <span class="cyan">exceptions/</span>                    异常定义
+  │       │   ├── <span class="yellow">__init__.py</span>                导出
+  │       │   └── <span class="yellow">base.py</span>                    基础异常类（APIException）
+  │       │
+  │       └── <span class="cyan">types/</span>
+  │           ├── <span class="yellow">messages.py</span>                LLM 对话消息类型（TextBlock、ToolUseBlock、ConversationMessage）
+  │           ├── <span class="yellow">jd_analysis.py</span>             JD 分析相关类型（SuggestionItem、JobDescriptionAnalysisSchema）
+  │           ├── <span class="yellow">base_tool.py</span>               Agent 工具基础类型定义
+  │           └── <span class="yellow">mixins.py</span>                  混入类（API Response Mixin）
+  │
+  ├── <span class="red">2026-04-09</span>  <span class="green">config/ AI 提供商配置管理模块</span>
+  │   │
+  │   └── <span class="cyan">apps/</span>
+  │       └── <span class="cyan">config/</span>
+  │           ├── <span class="yellow">__init__.py</span>                config 包初始化
+  │           ├── <span class="yellow">schemas.py</span>                 配置 Pydantic 模型（ProviderConfig、ProviderConfigUpdate）
+  │           └── <span class="yellow">router.py</span>                  配置 API 路由（获取/更新/切换 Provider）
+  │
+  ├── <span class="red">2026-04-11</span>  <span class="green">resume/ 和 resume_section/ 简历管理模块</span>
+  │   │
+  │   ├── <span class="cyan">shared/</span>
+  │   │   ├── <span class="yellow">resume_prompt.py</span>               简历相关的 LLM prompt 模板（解析、生成）
+  │   │   │
+  │   │   ├── <span class="yellow">resume_section_factory.py</span>      简历板块工厂（创建默认板块结构）
+  │   │   │
+  │   │   └── <span class="yellow">task_state.py</span>                  任务状态管理（内存存储，追踪异步任务进度）
+  │   │
+  │   └── <span class="cyan">apps/</span>
+  │       ├── <span class="cyan">resume/</span>
+  │       │   ├── <span class="yellow">__init__.py</span>               resume 包初始化
+  │       │   ├── <span class="yellow">router.py</span>                 简历 API 路由（创建/查询/更新/删除）
+  │       │   ├── <span class="yellow">schemas.py</span>                创建简历请求模型（CreateWorkspaceRequest、CreateSubResumeRequest）
+  │       │   └── <span class="yellow">service.py</span>                简历业务逻辑（创建默认板块、复制板块）
+  │       │
+  │       └── <span class="cyan">resume_section/</span>
+  │           ├── <span class="yellow">__init__.py</span>               resume_section 包初始化
+  │           └── <span class="yellow">router.py</span>                 板块 API 路由（查询/创建/更新/删除/排序）
+  │
+  ├── <span class="red">2026-04-11</span>  <span class="green">jd_analysis/ JD 匹配分析模块</span>
+  │   │
+  │   └── <span class="cyan">apps/</span>
+  │       └── <span class="cyan">jd_analysis/</span>
+  │           ├── <span class="yellow">__init__.py</span>               jd_analysis 包初始化
+  │           ├── <span class="yellow">router.py</span>                 分析 API 路由（分析简历与 JD 匹配度）
+  │           ├── <span class="yellow">schemas.py</span>                分析请求/响应模型（AnalyzeJDRequest）
+  │           ├── <span class="yellow">prompt.py</span>                 LLM prompt 模板（JD 分析提示词）
+  │           ├── <span class="yellow">call_llm.py</span>               LLM 调用封装
+  │           └── <span class="yellow">service.py</span>                分析业务逻辑
+  │
+  ├── <span class="red">2026-04-15</span>  <span class="green">cover_letter/ 求职信生成模块</span>
+  │   │
+  │   ├── <span class="cyan">shared/</span>
+  │   │   └── <span class="cyan">types/</span>
+  │   │       └── <span class="yellow">cover_letter.py</span>           求职信类型定义（CoverLetterRequest）
+  │   │
+  │   └── <span class="cyan">apps/</span>
+  │       └── <span class="cyan">cover_letter/</span>
+  │           ├── <span class="yellow">__init__.py</span>              cover_letter 包初始化
+  │           ├── <span class="yellow">router.py</span>                求职信 API 路由（SSE 流式响应）
+  │           ├── <span class="yellow">schemas.py</span>               求职信请求模型（CoverLetterRequest）
+  │           ├── <span class="yellow">prompt.py</span>                LLM prompt 模板（求职信生成提示词）
+  │           └── <span class="yellow">service.py</span>               求职信业务逻辑（SSE 流式生成）
+  │
+  ├── <span class="red">2026-04-15</span>  <span class="green">conversation_message/ 对话消息管理</span>
+  │   │
+  │   └── <span class="cyan">apps/</span>
+  │       └── <span class="cyan">conversation_message/</span>
+  │           ├── <span class="yellow">__init__.py</span>              conversation_message 包初始化
+  │           └── <span class="yellow">router.py</span>                消息 API 路由（查询历史消息、导出 Markdown）
+  │
+  ├── <span class="red">2026-04-16</span>  <span class="green">work/ 任务系统重构</span>
+  │   │
+  │   ├── <span class="cyan">shared/</span>
+  │   │   └── <span class="cyan">types/</span>
+  │   │       ├── <span class="yellow">work.py</span>                  工作任务类型定义（WorkTaskSchema）
+  │   │       └── <span class="yellow">task.py</span>                  任务相关类型定义（TaskStatus）
+  │   │
+  │   └── <span class="cyan">apps/</span>
+  │       └── <span class="cyan">work/</span>
+  │           ├── <span class="yellow">__init__.py</span>             work 包初始化
+  │           ├── <span class="yellow">router.py</span>               任务 API 路由（创建/查询任务状态）
+  │           └── <span class="yellow">sse.py</span>                  SSE 流式任务状态（任务进度推送）
+  │
+  ├── <span class="red">2026-04-22</span>  <span class="green">resume_assistant/agent/ Agent 核心模块完善</span>
+  │   │
+  │   └── <span class="cyan">apps/</span>
+  │       └── <span class="cyan">resume_assistant/</span>
+  │           └── <span class="cyan">agent/</span>
+  │               └── (已在上方列出)
+  │
+  ├── <span class="red">2026-04-23</span>  <span class="green">export/ PDF 导出模块</span>
+  │   │
+  │   └── <span class="cyan">apps/</span>
+  │       └── <span class="cyan">export/</span>
+  │           ├── <span class="yellow">__init__.py</span>             export 包初始化
+  │           ├── <span class="yellow">router.py</span>               导出 API 路由（生成 PDF）
+  │           ├── <span class="yellow">browser_manager.py</span>      Playwright 浏览器管理（启动、关闭、复用）
+  │           ├── <span class="yellow">pdf_generator.py</span>        PDF 生成器（Playwright 渲染 HTML 为 PDF）
+  │           └── <span class="yellow">service.py</span>             导出业务逻辑
+  │
+  ├── <span class="red">2026-04-25</span>  <span class="green">收尾</span>
+  │   │
+  │   ├── <span class="cyan">shared/</span>
+  │   │   └── <span class="cyan">types/</span>
+  │   │       └── <span class="yellow">template.py</span>             模板类型定义（TemplateSchema）
+  │   │
+  │   └── <span class="cyan">apps/</span>
+  │       └── <span class="cyan">template/</span>
+  │           ├── <span class="yellow">__init__.py</span>            template 包初始化
+  │           └── <span class="yellow">router.py</span>              模板 API 路由（查询/创建/更新模板）
+  │
+  └── <span class="red">main.py</span>  <span class="green">应用入口（最后组装）</span>
+      │
+      └── <span class="yellow">main.py</span>                        FastAPI 应用入口，注册所有路由、中间件、生命周期
+</pre>
+</body>
+</html>
